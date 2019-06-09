@@ -30,7 +30,7 @@ where
     type Item = (T, usize);
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let current_item = std::mem::replace(&mut self.current, None);
+            let current_item = std::mem::replace(&mut self.current, None); // Seems to be issues with doing by-ref and by-val matching at once, so do it all by-val
             match (self.iter.next(), current_item) {
                 (Some(item), None) => {
                     self.current = Some(item);
@@ -48,6 +48,7 @@ where
                     }
                 }
                 (None, None) => {
+                    // No need to replace self.current, it's already None
                     return None;
                 }
             }
