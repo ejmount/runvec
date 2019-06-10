@@ -1,6 +1,8 @@
 mod iter;
+mod runvec;
 
 pub use iter::RunIterator;
+pub use runvec::RunLenVec;
 
 #[cfg(test)]
 mod tests {
