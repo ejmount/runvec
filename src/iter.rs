@@ -22,10 +22,10 @@ where
     }
 }
 
-impl<T, I> Iterator for RunIterator<T, I>
+impl<T, Iter> Iterator for RunIterator<T, Iter>
 where
     T: PartialEq,
-    I: Iterator<Item = T>,
+    Iter: Iterator<Item = T>,
 {
     type Item = (T, usize);
     fn next(&mut self) -> Option<Self::Item> {
@@ -51,6 +51,52 @@ where
                     // No need to replace self.current, it's already None
                     return None;
                 }
+            }
+        }
+    }
+}
+
+pub struct ExpandingIterator<T, Iter>
+where
+    T: Clone,
+    Iter: Iterator<Item = (T, usize)>,
+{
+    iter: Iter,
+    cur_item: Option<(T, usize)>,
+}
+
+impl<T, Iter> ExpandingIterator<T, Iter>
+where
+    T: Clone,
+    Iter: Iterator<Item = (T, usize)>,
+{
+    pub fn new(mut iter: Iter) -> ExpandingIterator<T, Iter> {
+        ExpandingIterator {
+            cur_item: iter.next(),
+            iter,
+        }
+    }
+}
+
+impl<T, Iter> Iterator for ExpandingIterator<T, Iter>
+where
+    T: Clone,
+    Iter: Iterator<Item = (T, usize)>,
+{
+    type Item = T;
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.cur_item {
+            &mut Some((ref element, ref mut count)) => {
+                *count -= 1;
+                let e = element.clone();
+                if *count == 0 {
+                    self.cur_item = self.iter.next();
+                }
+                return Some(e);
+            }
+            &mut None => {
+                self.cur_item = self.iter.next();
+                return None;
             }
         }
     }
