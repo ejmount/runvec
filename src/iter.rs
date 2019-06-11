@@ -56,6 +56,7 @@ where
     }
 }
 
+#[derive(Clone)]
 pub struct ExpandingIterator<T, Iter>
 where
     T: Clone,

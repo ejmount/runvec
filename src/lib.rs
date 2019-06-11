@@ -1,8 +1,8 @@
 mod iter;
 mod runvec;
 
-pub use iter::{ExpandingIterator, RunIterator};
 pub use crate::runvec::RunLenVec;
+pub use iter::{ExpandingIterator, RunIterator};
 
 #[cfg(test)]
 mod tests {
@@ -24,4 +24,3 @@ mod tests {
     }
 
 }
-

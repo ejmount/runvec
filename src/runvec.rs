@@ -1,11 +1,14 @@
-use crate::iter::RunIterator;
+use crate::iter::{ExpandingIterator, RunIterator};
 
-pub struct RunLenVec<T: Clone + Eq> {
+pub trait RunLenCompressible: Clone + PartialEq {}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RunLenVec<T: RunLenCompressible> {
     inner: Vec<(T, usize)>,
     total_size: usize,
 }
 
-impl<T: Clone + Eq> RunLenVec<T> {
+impl<T: RunLenCompressible> RunLenVec<T> {
     fn segment_containing_index(&self, index: usize) -> Option<(usize, usize)> {
         if index < self.total_size {
             let mut total_span = 0;
@@ -18,6 +21,21 @@ impl<T: Clone + Eq> RunLenVec<T> {
         } else {
             None
         }
+    }
+
+    fn compact(&mut self) {
+        let inner = &mut self.inner;
+        for index in (inner.len() - 1)..0 {
+            if inner[index].0 == inner[index - 1].0 {
+                inner[index - 1].1 += inner[index].1;
+                inner[index].1 = 0;
+            }
+        }
+        self.inner.retain(|&(_, c)| c > 0);
+        // self.total_size _should_ be unchanged
+    }
+    fn update_size(&mut self) {
+        self.total_size = self.inner.iter().map(|(_, s)| s).sum();
     }
 
     pub fn new() -> RunLenVec<T> {
@@ -60,6 +78,7 @@ impl<T: Clone + Eq> RunLenVec<T> {
                 last_group.1 -= elements_to_remove;
             }
         }
+        self.total_size = self.total_size - elements_to_remove;
     }
 
     pub fn insert(&mut self, index: usize, element: T) {
@@ -92,7 +111,7 @@ impl<T: Clone + Eq> RunLenVec<T> {
         F: FnMut(&T) -> bool,
     {
         self.inner.retain(|(e, _)| func(e));
-        self.total_size = self.inner.iter().map(|(_, s)| s).sum();
+        self.update_size();
     }
     pub fn push(&mut self, element: T) {
         if (!self.inner.is_empty()) && self.inner.last().unwrap().0 == element {
@@ -116,16 +135,7 @@ impl<T: Clone + Eq> RunLenVec<T> {
     }
 
     pub fn append(&mut self, other: &mut Vec<T>) {
-        let mut new_elements = RunIterator::new(other.drain(..)).peekable();
-        let first_group = new_elements.peek();
-        if let Some(group) = first_group {
-            if let Some(last) = self.inner.last() {
-                if last.0 == group.0 {
-                    self.inner.last_mut().unwrap().1 += group.1;
-                }
-            }
-        }
-        self.inner.extend(new_elements);
+        self.extend(other.drain(..))
     }
     pub fn join(&mut self, other: &mut Vec<(T, usize)>) {
         self.inner.append(other)
@@ -151,8 +161,8 @@ impl<T: Clone + Eq> RunLenVec<T> {
         if self.inner[segment].1 == 0 {
             self.inner.remove(segment);
         }
-        self.total_size = self.inner.iter().map(|(_, n)| n).sum();
-        new_vec.total_size = new_vec.inner.iter().map(|(_, n)| n).sum();
+        self.update_size();
+        new_vec.update_size();
         return new_vec;
     }
     pub fn resize_with<F>(&mut self, new_len: usize, mut f: F)
@@ -197,5 +207,175 @@ impl<T: Clone + Eq> RunLenVec<T> {
     }
     pub fn reverse(&mut self) {
         self.inner.reverse()
+    }
+
+    pub fn iter<'a>(&'a self) -> Iter<'a, T> {
+        Iter::new(&self.inner)
+    }
+    pub fn into_iter(self) -> IntoIter<T> {
+        IntoIter(ExpandingIterator::new(self.inner.into_iter()))
+    }
+
+    pub fn sort(&mut self)
+    where
+        T: Ord,
+    {
+        self.sort_by(T::cmp)
+    }
+    pub fn sort_by<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&T, &T) -> std::cmp::Ordering,
+    {
+        self.inner.sort_by(|(a, _), (b, _)| f(a, b));
+        self.compact();
+    }
+    pub fn sort_by_key<F, K>(&mut self, mut f: F)
+    where
+        F: FnMut(&T) -> K,
+        K: Ord,
+    {
+        self.inner.sort_by_key(|(e, _)| f(e));
+        self.compact();
+    }
+    pub fn sort_by_cached_key<F, K>(&mut self, mut f: F)
+    where
+        F: FnMut(&T) -> K,
+        K: Ord,
+    {
+        self.inner.sort_by_cached_key(|(e, _)| f(e));
+        self.compact();
+    }
+    pub fn to_vec(&self) -> Vec<T> {
+        self.iter().map(Clone::clone).collect()
+    }
+}
+
+impl<T> std::hash::Hash for RunLenVec<T>
+where
+    T: std::hash::Hash + RunLenCompressible,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let hash_item = |e: &T| e.hash(state);
+        self.iter().for_each(hash_item);
+    }
+}
+
+impl<T> std::fmt::Debug for RunLenVec<T>
+where
+    T: RunLenCompressible + std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "RunLenVec {{ {} items: ", self.total_size)?;
+        for (element, count) in &self.inner {
+            write!(f, "({:?}, {:?}), ", count, element)?
+        }
+        write!(f, "}}")
+    }
+}
+
+impl<T: RunLenCompressible> std::iter::FromIterator<T> for RunLenVec<T> {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let elements: Vec<_> = RunIterator::new(iter.into_iter()).collect();
+        RunLenVec {
+            total_size: elements.iter().map(|&(_, c)| c).sum(),
+            inner: elements,
+        }
+    }
+}
+
+impl<T: RunLenCompressible> Extend<T> for RunLenVec<T> {
+    fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let mut new_elements = RunIterator::new(iter.into_iter()).peekable();
+        let first_group = new_elements.peek();
+        if let Some(group) = first_group {
+            if let Some(last) = self.inner.last() {
+                if last.0 == group.0 {
+                    self.inner.last_mut().unwrap().1 += group.1;
+                }
+            }
+        }
+        self.inner.extend(new_elements);
+    }
+}
+
+impl<'a, T> Extend<&'a T> for RunLenVec<T>
+where
+    T: RunLenCompressible,
+{
+    fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = &'a T>,
+    {
+        self.extend(iter.into_iter().map(Clone::clone))
+    }
+}
+
+impl<T: RunLenCompressible> Default for RunLenVec<T> {
+    fn default() -> Self {
+        RunLenVec::new()
+    }
+}
+
+impl<T: RunLenCompressible> std::ops::Index<usize> for RunLenVec<T> {
+    type Output = T;
+    fn index(&self, index: usize) -> &T {
+        self.get(index).unwrap()
+    }
+}
+
+impl<T: RunLenCompressible> IntoIterator for RunLenVec<T> {
+    type Item = T;
+    type IntoIter = IntoIter<T>;
+    fn into_iter(self) -> IntoIter<T> {
+        self.into_iter()
+    }
+}
+
+impl<'a, T: RunLenCompressible> IntoIterator for &'a RunLenVec<T> {
+    type Item = &'a T;
+    type IntoIter = Iter<'a, T>;
+    fn into_iter(self) -> Iter<'a, T> {
+        self.iter()
+    }
+}
+
+#[derive(Clone)]
+struct MiniRefIter<'a, T>(&'a Vec<(T, usize)>, usize);
+impl<'a, T> Iterator for MiniRefIter<'a, T> {
+    type Item = (&'a T, usize);
+    fn next(&mut self) -> Option<(&'a T, usize)> {
+        let e = self.0.get(self.1).map(|&(ref e, c)| (e, c));
+        self.1 += 1;
+        return e;
+    }
+}
+
+#[derive(Clone)]
+pub struct Iter<'a, T: Clone>(ExpandingIterator<&'a T, MiniRefIter<'a, T>>);
+
+impl<'a, T: Clone> Iter<'a, T> {
+    fn new(v: &'a Vec<(T, usize)>) -> Iter<'a, T> {
+        Iter(ExpandingIterator::new(MiniRefIter(v, 0)))
+    }
+}
+impl<'a, T: Clone> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<&'a T> {
+        self.0.next()
+    }
+}
+
+#[derive(Clone)]
+pub struct IntoIter<T: Clone>(ExpandingIterator<T, std::vec::IntoIter<(T, usize)>>);
+impl<T: Clone> Iterator for IntoIter<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        self.0.next()
     }
 }
