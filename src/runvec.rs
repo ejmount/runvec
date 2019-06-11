@@ -1,6 +1,7 @@
 use crate::iter::{ExpandingIterator, RunIterator};
 
 pub trait RunLenCompressible: Clone + PartialEq {}
+impl<T> RunLenCompressible for T where T: Clone + PartialEq {}
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RunLenVec<T: RunLenCompressible> {
@@ -82,18 +83,30 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
 
     pub fn insert(&mut self, index: usize, element: T) {
-        let (segment_index, offset) = self.segment_containing_index(index).unwrap();
-        if element == self.inner[segment_index].0 {
-            self.inner[segment_index].1 += 1;
+        if index == self.total_size {
+            if let Some(ref mut l) = self.inner.last_mut() {
+                if l.0 == element {
+                    l.1 += 1;
+                    return;
+                }
+            } // Fall through here if l.0 != element, because we can't combine the two conditions
+            self.inner.push((element, 1))
         } else {
-            let (orig_element, size) = &mut self.inner[segment_index];
-            let excess = *size - offset;
-            *size -= offset;
-            let new_element = orig_element.clone();
-            self.inner.insert(segment_index + 1, (element, 1));
-            self.inner.insert(segment_index + 2, (new_element, excess));
+            let (segment_index, offset) = self.segment_containing_index(index).unwrap();
+            if element == self.inner[segment_index].0 {
+                self.inner[segment_index].1 += 1;
+            } else {
+                let (orig_element, size) = &mut self.inner[segment_index];
+                let excess = *size - offset;
+                *size -= offset;
+                let new_element = orig_element.clone();
+                self.inner.insert(segment_index + 1, (element, 1));
+                if excess > 0 {
+                    self.inner.insert(segment_index + 2, (new_element, excess));
+                }
+            }
+            self.total_size += 1;
         }
-        self.total_size += 1;
     }
     pub fn remove(&mut self, index: usize) -> T {
         let (segment_index, _) = self.segment_containing_index(index).unwrap();
@@ -114,8 +127,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.update_size();
     }
     pub fn push(&mut self, element: T) {
-        if (!self.inner.is_empty()) && self.inner.last().unwrap().0 == element {
-            self.inner.last_mut().unwrap().1 += 1;
+        if let Some(ref mut l) = self.inner.last_mut() {
+            l.1 += 1;
         } else {
             self.inner.push((element, 1))
         }
@@ -138,6 +151,15 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.extend(other.drain(..))
     }
     pub fn join(&mut self, other: &mut Vec<(T, usize)>) {
+        match (self.inner.last_mut(), other.first_mut()) {
+            (Some(l), Some(f)) => {
+                if l.0 == f.0 {
+                    l.1 += f.1;
+                    other.remove(0);
+                }
+            }
+            _ => {}
+        }
         self.inner.append(other)
     }
     pub fn clear(&mut self) {
@@ -294,9 +316,10 @@ impl<T: RunLenCompressible> Extend<T> for RunLenVec<T> {
         let mut new_elements = RunIterator::new(iter.into_iter()).peekable();
         let first_group = new_elements.peek();
         if let Some(group) = first_group {
-            if let Some(last) = self.inner.last() {
+            if let Some(ref mut last) = self.inner.last_mut() {
                 if last.0 == group.0 {
-                    self.inner.last_mut().unwrap().1 += group.1;
+                    last.1 += group.1;
+                    new_elements.next(); // Throw away the now-redundant duplicate group
                 }
             }
         }
