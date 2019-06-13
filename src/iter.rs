@@ -37,7 +37,7 @@ where
                     self.count = 1;
                 }
                 (next, Some(current)) => {
-                    if next.is_some() && current.eq(next.as_ref().unwrap()) {
+                    if let Some(true) = next.as_ref().map(|v| current.eq(v)) {
                         self.count += 1;
                         self.current = Some(current);
                     } else {
