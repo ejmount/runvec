@@ -1,4 +1,4 @@
-use crate::iter::{ExpandingIterator, RunIterator};
+use crate::iter::{ExpandingIterator, RunLengthIterator};
 
 pub trait RunLenCompressible: Clone + PartialEq {}
 impl<T> RunLenCompressible for T where T: Clone + PartialEq {}
@@ -297,7 +297,7 @@ impl<T: RunLenCompressible> std::iter::FromIterator<T> for RunLenVec<T> {
     where
         I: IntoIterator<Item = T>,
     {
-        let elements: Vec<_> = RunIterator::new(iter.into_iter()).collect();
+        let elements: Vec<_> = RunLengthIterator::new(iter.into_iter()).collect();
         RunLenVec {
             total_size: elements.iter().map(|&(_, c)| c).sum(),
             inner: elements,
@@ -310,7 +310,7 @@ impl<T: RunLenCompressible> Extend<T> for RunLenVec<T> {
     where
         I: IntoIterator<Item = T>,
     {
-        let mut new_elements = RunIterator::new(iter.into_iter()).peekable();
+        let mut new_elements = RunLengthIterator::new(iter.into_iter()).peekable();
         let first_group = new_elements.peek();
         if let Some(group) = first_group {
             if let Some(ref mut last) = self.inner.last_mut() {

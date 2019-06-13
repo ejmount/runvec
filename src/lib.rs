@@ -2,7 +2,7 @@ mod iter;
 mod runvec;
 
 pub use crate::runvec::RunLenVec;
-pub use iter::{ExpandingIterator, RunIterator};
+pub use iter::{ExpandingIterator, RunLengthIterator};
 
 #[cfg(test)]
 mod tests {
@@ -11,7 +11,7 @@ mod tests {
     fn runiter_test() {
         let expected = vec![(1, 3), (5, 1), (6, 1), (3, 1), (2, 3)];
         let test_items = vec![1, 1, 1, 5, 6, 3, 2, 2, 2];
-        let ri = RunIterator::new(test_items.into_iter());
+        let ri = RunLengthIterator::new(test_items.into_iter());
         assert_eq!(ri.collect::<Vec<_>>(), expected);
     }
 

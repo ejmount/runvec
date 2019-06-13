@@ -1,4 +1,4 @@
-pub struct RunIterator<T, Iter>
+pub struct RunLengthIterator<T, Iter>
 where
     T: PartialEq,
     Iter: Iterator<Item = T>,
@@ -8,13 +8,13 @@ where
     count: usize,
 }
 
-impl<T, Iter> RunIterator<T, Iter>
+impl<T, Iter> RunLengthIterator<T, Iter>
 where
     T: PartialEq,
     Iter: Iterator<Item = T>,
 {
-    pub fn new(iter: Iter) -> RunIterator<T, Iter> {
-        RunIterator {
+    pub fn new(iter: Iter) -> RunLengthIterator<T, Iter> {
+        RunLengthIterator {
             iter,
             current: None,
             count: 0,
@@ -22,7 +22,7 @@ where
     }
 }
 
-impl<T, Iter> Iterator for RunIterator<T, Iter>
+impl<T, Iter> Iterator for RunLengthIterator<T, Iter>
 where
     T: PartialEq,
     Iter: Iterator<Item = T>,
