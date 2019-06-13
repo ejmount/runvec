@@ -24,18 +24,18 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             None
         }
     }
-
     fn compact(&mut self) {
         let inner = &mut self.inner;
-        for index in (inner.len() - 1)..0 {
+        for index in (1..inner.len()).rev() {
             if inner[index].0 == inner[index - 1].0 {
                 inner[index - 1].1 += inner[index].1;
                 inner[index].1 = 0;
             }
         }
         self.inner.retain(|&(_, c)| c > 0);
-        // self.total_size _should_ be unchanged
+        // self.total_size has not changed.
     }
+
     fn update_size(&mut self) {
         self.total_size = self.inner.iter().map(|(_, s)| s).sum();
     }
@@ -64,11 +64,22 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     pub fn shrink_to_fit(&mut self) {
         self.inner.shrink_to_fit()
     }
+
+    /// Shortens the vector to have the given number of elements, or fewer. Has no effect if the vector is already short enough.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let mut rlv : RunLenVec<_> = vec![1,1,1,1,2,1,1,1].into_iter().collect();
+    /// println!("{}", rlv.len());
+    /// rlv.truncate(3);
+    /// assert_eq!(rlv.len(), 3);
+    /// assert_eq!(rlv.count_runs(), 1);
+    /// ```
     pub fn truncate(&mut self, len: usize) {
         if len >= self.total_size {
             return;
         }
         let mut elements_to_remove = self.total_size - len;
+        self.total_size = self.total_size - elements_to_remove;
         while elements_to_remove > 0 {
             let last_group = self.inner.last_mut().unwrap(); // Inner should be non-empty if self.total_size > 0, implied by total_size > (a usize)
             let last_group_size = last_group.1;
@@ -78,9 +89,9 @@ impl<T: RunLenCompressible> RunLenVec<T> {
                 self.inner.pop();
             } else {
                 last_group.1 -= elements_to_remove;
+                elements_to_remove = 0;
             }
         }
-        self.total_size = self.total_size - elements_to_remove;
     }
 
     pub fn insert(&mut self, index: usize, element: T) {
@@ -116,9 +127,9 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
 
     /// Applies the given closure to each element and removes elements where the closure returns false, as per the same method on [`Vec`][retain], except only once for each run.
-    /// 
+    ///
     /// [retain]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain
-    /// 
+    ///
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// let mut items : RunLenVec<_> = vec![1,1,1,2,2,2,3,3,3].into_iter().collect();
@@ -178,6 +189,9 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
     pub fn len(&self) -> usize {
         self.total_size
+    }
+    pub fn count_runs(&self) -> usize {
+        self.inner.len()
     }
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
@@ -412,4 +426,25 @@ impl<T: Clone> Iterator for IntoIter<T> {
     fn next(&mut self) -> Option<T> {
         self.0.next()
     }
+}
+
+#[test]
+fn compaction_test() {
+    let mut rlv = RunLenVec {
+        inner: vec![
+            (1, 1),
+            (1, 1),
+            (1, 2),
+            (2, 2),
+            (2, 1),
+            (1, 1),
+            (1, 1),
+            (1, 1),
+        ],
+        total_size: 10,
+    };
+    rlv.compact();
+    println!("{:?}", rlv.inner);
+    assert_eq!(rlv.inner.len(), 3);
+    assert_eq!(rlv.len(), rlv.total_size);
 }
