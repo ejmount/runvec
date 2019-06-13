@@ -84,13 +84,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
 
     pub fn insert(&mut self, index: usize, element: T) {
         if index == self.total_size {
-            if let Some(ref mut l) = self.inner.last_mut() {
-                if l.0 == element {
-                    l.1 += 1;
-                    return;
-                }
-            } // Fall through here if l.0 != element, because we can't combine the two conditions
-            self.inner.push((element, 1))
+            self.push(element);
         } else {
             let (segment_index, offset) = self.segment_containing_index(index).unwrap();
             if element == self.inner[segment_index].0 {
@@ -127,20 +121,23 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.update_size();
     }
     pub fn push(&mut self, element: T) {
-        if let Some(ref mut l) = self.inner.last_mut() {
-            l.1 += 1;
-        } else {
-            self.inner.push((element, 1))
-        }
         self.total_size += 1;
+        if let Some(ref mut l) = self.inner.last_mut() {
+            if l.0 == element {
+                l.1 += 1;
+                return;
+            }
+        }
+        self.inner.push((element, 1))
     }
     pub fn pop(&mut self) -> Option<T> {
         if let Some(last) = self.inner.last_mut() {
             last.1 -= 1;
-            let element = last.0.clone();
-            if last.1 == 0 {
-                self.inner.pop();
-            }
+            let element = if last.1 == 0 {
+                self.inner.pop().unwrap().0
+            } else {
+                last.0.clone()
+            };
             return Some(element);
         } else {
             return None;
