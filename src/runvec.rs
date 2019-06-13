@@ -1,5 +1,6 @@
 use crate::iter::{ExpandingIterator, RunLengthIterator};
 
+/// Hello
 pub trait RunLenCompressible: Clone + PartialEq {}
 impl<T> RunLenCompressible for T where T: Clone + PartialEq {}
 
@@ -113,6 +114,19 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.total_size -= 1;
         return element;
     }
+
+    /// Applies the given closure to each element and removes elements where the closure returns false, as per the same method on [`Vec`][retain], except only once for each run.
+    /// 
+    /// [retain]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain
+    /// 
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let mut items : RunLenVec<_> = vec![1,1,1,2,2,2,3,3,3].into_iter().collect();
+    /// let mut calls = 0;
+    /// items.retain(|x: &u32| {calls += 1; *x % 2 != 0});
+    /// assert_eq!(calls, 3);
+    /// assert_eq!(items.len(), 6);
+    /// ```
     pub fn retain<F>(&mut self, mut func: F)
     where
         F: FnMut(&T) -> bool,

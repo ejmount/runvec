@@ -1,7 +1,7 @@
 mod iter;
 mod runvec;
 
-pub use crate::runvec::RunLenVec;
+pub use crate::runvec::{RunLenVec, RunLenCompressible};
 pub use iter::{ExpandingIterator, RunLengthIterator};
 
 #[cfg(test)]
