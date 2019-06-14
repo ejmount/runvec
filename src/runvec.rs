@@ -480,7 +480,6 @@ fn compaction_test() {
         total_size: 10,
     };
     rlv.compact();
-    println!("{:?}", rlv.inner);
     assert_eq!(rlv.inner.len(), 3);
-    assert_eq!(rlv.len(), rlv.total_size);
+    assert_eq!(rlv.len(), 10);
 }
