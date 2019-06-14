@@ -15,7 +15,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         if index < self.total_size {
             let mut total_span = 0;
             let mut current_ind = 0;
-            while (total_span + self.inner[current_ind].1) < index {
+            while (total_span + self.inner[current_ind].1) <= index {
                 total_span += self.inner[current_ind].1;
                 current_ind += 1;
             }
@@ -78,12 +78,11 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             return;
         }
         let mut elements_to_remove = self.total_size - len;
-        self.total_size = self.total_size - elements_to_remove;
+        self.total_size -= elements_to_remove;
         while elements_to_remove > 0 {
             let last_group = self.inner.last_mut().unwrap(); // Inner should be non-empty if self.total_size > 0, implied by total_size > (a usize)
             let last_group_size = last_group.1;
             if last_group_size <= elements_to_remove {
-                std::mem::drop(last_group);
                 elements_to_remove -= last_group_size;
                 self.inner.pop();
             } else {
@@ -163,6 +162,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
     pub fn pop(&mut self) -> Option<T> {
         if let Some(last) = self.inner.last_mut() {
+            self.total_size -= 1;
             last.1 -= 1;
             let element = if last.1 == 0 {
                 self.inner.pop().unwrap().0
