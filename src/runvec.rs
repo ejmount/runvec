@@ -4,7 +4,7 @@ use crate::iter::{ExpandingIterator, RunLengthIterator};
 pub trait RunLenCompressible: Clone + PartialEq {}
 impl<T> RunLenCompressible for T where T: Clone + PartialEq {}
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone)]
 pub struct RunLenVec<T: RunLenCompressible> {
     inner: Vec<(T, usize)>,
     total_size: usize,
@@ -179,15 +179,12 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.extend(other.drain(..))
     }
     pub fn join(&mut self, other: &mut Vec<(T, usize)>) {
-        match (self.inner.last_mut(), other.first_mut()) {
-            (Some(l), Some(f)) => {
+        if let (Some(l), Some(f)) = (self.inner.last_mut(), other.first_mut()) {
                 if l.0 == f.0 {
                     l.1 += f.1;
                     other.remove(0);
                 }
             }
-            _ => {}
-        }
         self.inner.append(other)
     }
     pub fn clear(&mut self) {
@@ -262,11 +259,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.inner.reverse()
     }
 
-    pub fn iter<'a>(&'a self) -> Iter<'a, T> {
+    pub fn iter(&self) -> Iter<T> {
         Iter::new(&self.inner)
-    }
-    pub fn into_iter(self) -> IntoIter<T> {
-        IntoIter(ExpandingIterator::new(self.inner.into_iter()))
     }
 
     pub fn sort(&mut self)
@@ -310,6 +304,42 @@ where
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let hash_item = |e: &T| e.hash(state);
         self.iter().for_each(hash_item);
+    }
+}
+
+impl<T> std::cmp::PartialEq for RunLenVec<T>
+where
+    T: RunLenCompressible,
+{
+    fn eq(&self, other: &Self) -> bool {
+        if self.total_size != other.total_size || self.inner.len() != other.inner.len() {
+            return false;
+        } else {
+            Iterator::zip(self.inner.iter(), other.inner.iter())
+                .map(|(x, y)| x == y)
+                .all(|b| b)
+        }
+    }
+}
+impl<T> std::cmp::Eq for RunLenVec<T> where T: RunLenCompressible + Eq {}
+
+impl<T> std::cmp::PartialOrd for RunLenVec<T>
+where
+    T: PartialOrd + RunLenCompressible,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.total_size.cmp(&other.total_size) {
+            std::cmp::Ordering::Equal => self.iter().partial_cmp(other.iter()),
+            order => Some(order),
+        }
+    }
+}
+impl<T> std::cmp::Ord for RunLenVec<T>
+where
+    T: Ord + RunLenCompressible,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
     }
 }
 
@@ -387,7 +417,7 @@ impl<T: RunLenCompressible> IntoIterator for RunLenVec<T> {
     type Item = T;
     type IntoIter = IntoIter<T>;
     fn into_iter(self) -> IntoIter<T> {
-        self.into_iter()
+        IntoIter(ExpandingIterator::new(self.inner.into_iter()))
     }
 }
 
@@ -400,7 +430,7 @@ impl<'a, T: RunLenCompressible> IntoIterator for &'a RunLenVec<T> {
 }
 
 #[derive(Clone)]
-struct MiniRefIter<'a, T>(&'a Vec<(T, usize)>, usize);
+struct MiniRefIter<'a, T: 'a>(&'a [(T, usize)], usize);
 impl<'a, T> Iterator for MiniRefIter<'a, T> {
     type Item = (&'a T, usize);
     fn next(&mut self) -> Option<(&'a T, usize)> {
@@ -414,7 +444,7 @@ impl<'a, T> Iterator for MiniRefIter<'a, T> {
 pub struct Iter<'a, T: Clone>(ExpandingIterator<&'a T, MiniRefIter<'a, T>>);
 
 impl<'a, T: Clone> Iter<'a, T> {
-    fn new(v: &'a Vec<(T, usize)>) -> Iter<'a, T> {
+    fn new(v: &[(T, usize)]) -> Iter<T> {
         Iter(ExpandingIterator::new(MiniRefIter(v, 0)))
     }
 }
