@@ -87,13 +87,12 @@ where
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.cur_item {
+            &mut Some((_, 1)) => {
+                std::mem::replace(&mut self.cur_item, self.iter.next()).map(|p| p.0)
+            }
             &mut Some((ref element, ref mut count)) => {
                 *count -= 1;
-                let e = element.clone();
-                if *count == 0 {
-                    self.cur_item = self.iter.next();
-                }
-                return Some(e);
+                return Some(element.clone());
             }
             &mut None => {
                 self.cur_item = self.iter.next();
