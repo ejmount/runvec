@@ -97,6 +97,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// # use crate::runvec::RunLenVec;
     /// let mut rlv : RunLenVec<_> = vec![1,1,1].into_iter().collect();
     /// rlv.insert(2, 2);
+    /// assert_eq!(rlv.len(), 4);
     /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![1,1,2,1]);
     /// ```
     pub fn insert(&mut self, index: usize, element: T) {
@@ -119,9 +120,18 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             self.total_size += 1;
         }
     }
+
+    /// Removes the element at a given index.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let mut rlv : RunLenVec<_> = vec![1,1,2,1,1].into_iter().collect();
+    /// rlv.remove(2);
+    /// assert_eq!(rlv.len(), 4);
+    /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![1,1,1,1]);
+    /// ```
     pub fn remove(&mut self, index: usize) -> T {
         let (segment_index, _) = self.segment_containing_index(index).unwrap();
-        let segment = self.inner.get_mut(segment_index).unwrap();
+        let segment = &mut self.inner[segment_index];
         segment.1 -= 1;
         let element = segment.0.clone();
         if segment.1 == 0 {
@@ -131,7 +141,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         return element;
     }
 
-    /// Applies the given closure to each element and removes elements where the closure returns false, as per the same method on [`Vec`][retain], except the closure is only called once for each run.
+    /// Applies the given closure to each element and keeps those elements where the closure returns true, as per the same method on [`Vec`][retain], except the closure is only called once for each run.
     ///
     /// [retain]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain
     ///
@@ -150,6 +160,17 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.inner.retain(|(e, _)| func(e));
         self.update_size();
     }
+    /// Pushes a new element to the rightmost end.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let mut rlv = RunLenVec::new();
+    /// rlv.push(0);
+    /// rlv.push(0);
+    /// rlv.push(1);
+    /// assert_eq!(rlv.len(), 3);
+    /// assert_eq!(rlv.count_runs(), 2);
+    /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![0,0,1]);
+    /// ```
     pub fn push(&mut self, element: T) {
         self.total_size += 1;
         if let Some(ref mut l) = self.inner.last_mut() {
@@ -160,6 +181,19 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         }
         self.inner.push((element, 1))
     }
+
+    /// Removes and returns the rightmost element.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let mut rlv : RunLenVec<_> = vec![2,1,1,1].into_iter().collect();
+    /// assert_eq!(rlv.pop(), Some(1));
+    /// assert_eq!(rlv.pop(), Some(1));
+    /// assert_eq!(rlv.len(), 2);
+    /// assert_eq!(rlv.pop(), Some(1));
+    /// assert_eq!(rlv.pop(), Some(2));
+    /// assert_eq!(rlv.pop(), None);
+    /// assert_eq!(rlv.len(), 0);
+    /// ```
     pub fn pop(&mut self) -> Option<T> {
         if let Some(last) = self.inner.last_mut() {
             self.total_size -= 1;
@@ -180,11 +214,11 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
     pub fn join(&mut self, other: &mut Vec<(T, usize)>) {
         if let (Some(l), Some(f)) = (self.inner.last_mut(), other.first_mut()) {
-                if l.0 == f.0 {
-                    l.1 += f.1;
-                    other.remove(0);
-                }
+            if l.0 == f.0 {
+                l.1 += f.1;
+                other.remove(0);
             }
+        }
         self.inner.append(other)
     }
     pub fn clear(&mut self) {
