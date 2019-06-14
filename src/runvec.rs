@@ -69,7 +69,6 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// let mut rlv : RunLenVec<_> = vec![1,1,1,1,2,1,1,1].into_iter().collect();
-    /// println!("{}", rlv.len());
     /// rlv.truncate(3);
     /// assert_eq!(rlv.len(), 3);
     /// assert_eq!(rlv.count_runs(), 1);
