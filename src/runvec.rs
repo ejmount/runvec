@@ -93,6 +93,13 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         }
     }
 
+    /// Insert the given element into the given logical index, splitting a run if required.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let mut rlv : RunLenVec<_> = vec![1,1,1].into_iter().collect();
+    /// rlv.insert(2, 2);
+    /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![1,1,2,1]);
+    /// ```
     pub fn insert(&mut self, index: usize, element: T) {
         if index == self.total_size {
             self.push(element);
@@ -103,7 +110,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             } else {
                 let (orig_element, size) = &mut self.inner[segment_index];
                 let excess = *size - offset;
-                *size -= offset;
+                *size = offset;
                 let new_element = orig_element.clone();
                 self.inner.insert(segment_index + 1, (element, 1));
                 if excess > 0 {
@@ -125,7 +132,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         return element;
     }
 
-    /// Applies the given closure to each element and removes elements where the closure returns false, as per the same method on [`Vec`][retain], except only once for each run.
+    /// Applies the given closure to each element and removes elements where the closure returns false, as per the same method on [`Vec`][retain], except the closure is only called once for each run.
     ///
     /// [retain]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.retain
     ///
