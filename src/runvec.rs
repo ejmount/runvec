@@ -46,6 +46,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             total_size: 0,
         }
     }
+
     pub fn with_capacity(capacity: usize) -> RunLenVec<T> {
         RunLenVec {
             inner: Vec::with_capacity(capacity),
@@ -68,7 +69,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// Shortens the vector to have the given number of elements, or fewer. Has no effect if the vector is already short enough.
     /// ```
     /// # use crate::runvec::RunLenVec;
-    /// let mut rlv : RunLenVec<_> = vec![1,1,1,1,2,1,1,1].into_iter().collect();
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1,1,1,1,2,1,1,1]);
     /// rlv.truncate(3);
     /// assert_eq!(rlv.len(), 3);
     /// assert_eq!(rlv.count_runs(), 1);
@@ -95,9 +97,11 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// Insert the given element into the given logical index, splitting a run if required.
     /// ```
     /// # use crate::runvec::RunLenVec;
-    /// let mut rlv : RunLenVec<_> = vec![1,1,1].into_iter().collect();
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1,1,1]);
     /// rlv.insert(2, 2);
-    /// assert_eq!(rlv.len(), 4);
+    /// # assert_eq!(rlv.len(), 4);
+    /// # assert_eq!(rlv.count_runs(), 3);
     /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![1,1,2,1]);
     /// ```
     pub fn insert(&mut self, index: usize, element: T) {
@@ -124,10 +128,13 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// Removes the element at a given index.
     /// ```
     /// # use crate::runvec::RunLenVec;
-    /// let mut rlv : RunLenVec<_> = vec![1,1,2,1,1].into_iter().collect();
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1,1,2,1,1]);
     /// rlv.remove(2);
-    /// assert_eq!(rlv.len(), 4);
-    /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![1,1,1,1]);
+    /// # assert_eq!(rlv.len(), 4);
+    /// println!("{:?}", rlv);
+    /// # assert_eq!(rlv.count_runs(), 1);
+    /// assert_eq!( vec![1,1,1,1], rlv.into_iter().collect::<Vec<_>>());
     /// ```
     pub fn remove(&mut self, index: usize) -> T {
         let (segment_index, _) = self.segment_containing_index(index).unwrap();
@@ -147,7 +154,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     ///
     /// ```
     /// # use crate::runvec::RunLenVec;
-    /// let mut items : RunLenVec<_> = vec![1,1,1,2,2,2,3,3,3].into_iter().collect();
+    /// # use std::iter::FromIterator;
+    /// let mut items = RunLenVec::from_iter(vec![1,1,1,2,2,2,3,3,3]);
     /// let mut calls = 0;
     /// items.retain(|x: &u32| {calls += 1; *x % 2 != 0});
     /// assert_eq!(calls, 3);
@@ -167,8 +175,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// rlv.push(0);
     /// rlv.push(0);
     /// rlv.push(1);
-    /// assert_eq!(rlv.len(), 3);
-    /// assert_eq!(rlv.count_runs(), 2);
+    /// # assert_eq!(rlv.len(), 3);
+    /// # assert_eq!(rlv.count_runs(), 2);
     /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![0,0,1]);
     /// ```
     pub fn push(&mut self, element: T) {
@@ -185,14 +193,15 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// Removes and returns the rightmost element.
     /// ```
     /// # use crate::runvec::RunLenVec;
-    /// let mut rlv : RunLenVec<_> = vec![2,1,1,1].into_iter().collect();
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![2,1,1,1]);
     /// assert_eq!(rlv.pop(), Some(1));
     /// assert_eq!(rlv.pop(), Some(1));
-    /// assert_eq!(rlv.len(), 2);
+    /// # assert_eq!(rlv.len(), 2);
     /// assert_eq!(rlv.pop(), Some(1));
     /// assert_eq!(rlv.pop(), Some(2));
     /// assert_eq!(rlv.pop(), None);
-    /// assert_eq!(rlv.len(), 0);
+    /// # assert_eq!(rlv.len(), 0);
     /// ```
     pub fn pop(&mut self) -> Option<T> {
         if let Some(last) = self.inner.last_mut() {
@@ -329,6 +338,14 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.inner.sort_by_cached_key(|(e, _)| f(e));
         self.compact();
     }
+
+    /// Copies and expands `self` into a new Vec
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let exp = vec![1,1,2,3,3];
+    /// let rlv = RunLenVec::from_iter(exp.clone());
+    /// assert_eq!(rlv.to_vec(), exp);
     pub fn to_vec(&self) -> Vec<T> {
         self.iter().map(Clone::clone).collect()
     }
