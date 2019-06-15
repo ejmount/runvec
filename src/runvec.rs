@@ -210,7 +210,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
 
     pub fn append(&mut self, other: &mut Vec<T>) {
-        self.extend(other.drain(..))
+        self.total_size += other.len();
+        self.extend(other.drain(..));
     }
     pub fn join(&mut self, other: &mut Vec<(T, usize)>) {
         if let (Some(l), Some(f)) = (self.inner.last_mut(), other.first_mut()) {
@@ -219,10 +220,12 @@ impl<T: RunLenCompressible> RunLenVec<T> {
                 other.remove(0);
             }
         }
-        self.inner.append(other)
+        self.inner.append(other);
+        self.update_size();
     }
     pub fn clear(&mut self) {
-        self.inner.clear()
+        self.inner.clear();
+        self.total_size = 0;
     }
     pub fn len(&self) -> usize {
         self.total_size
