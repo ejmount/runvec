@@ -492,36 +492,6 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         Iter::new(&self.inner)
     }
 
-    pub fn sort(&mut self)
-    where
-        T: Ord,
-    {
-        self.sort_by(T::cmp)
-    }
-    pub fn sort_by<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&T, &T) -> std::cmp::Ordering,
-    {
-        self.inner.sort_by(|(a, _), (b, _)| f(a, b));
-        self.compact();
-    }
-    pub fn sort_by_key<F, K>(&mut self, mut f: F)
-    where
-        F: FnMut(&T) -> K,
-        K: Ord,
-    {
-        self.inner.sort_by_key(|(e, _)| f(e));
-        self.compact();
-    }
-    pub fn sort_by_cached_key<F, K>(&mut self, mut f: F)
-    where
-        F: FnMut(&T) -> K,
-        K: Ord,
-    {
-        self.inner.sort_by_cached_key(|(e, _)| f(e));
-        self.compact();
-    }
-
     /// Copies and expands `self` into a new Vec
     /// ```
     /// # use crate::runvec::RunLenVec;
