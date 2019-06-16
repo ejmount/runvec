@@ -4,7 +4,6 @@ use crate::iter::{ExpandingIterator, RunLengthIterator};
 pub trait RunLenCompressible: Clone + PartialEq {}
 impl<T> RunLenCompressible for T where T: Clone + PartialEq {}
 
-
 #[derive(Clone)]
 pub struct RunLenVec<T: RunLenCompressible> {
     inner: Vec<(T, usize)>,
@@ -84,7 +83,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
 
     /// Constructs a new vector with the given capacity. See [`capacity()`][capacity] for how this differs from the capacity of a `Vec`.
-    /// 
+    ///
     /// [capacity]: #method.capacity
     /// ```
     /// # use crate::runvec::RunLenVec;
@@ -116,7 +115,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
 
     /// Increases the capacity to hold at least `additional` more runs of any size, with the same disclaimers as [`Vec::reserve`][reserve]
-    /// 
+    ///
     /// [reserve]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.reserve
     /// # Panics
     /// Panics if the new capacity overflows `usize`
@@ -132,7 +131,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
 
     /// Shrinks the vector as much as possible, as per [`Vec::shrink_to_fit`][shrink]
-    /// 
+    ///
     /// [shrink]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.shrink_to_fit
     pub fn shrink_to_fit(&mut self) {
         self.inner.shrink_to_fit()
@@ -167,8 +166,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
 
     /// Insert the given element into the given logical index, splitting a run if required.
-    /// # Panics 
-    /// Panics if a single run contains more than `usize` elements. 
+    /// # Panics
+    /// Panics if a single run contains more than `usize` elements.
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// # use std::iter::FromIterator;
@@ -251,7 +250,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
     /// Pushes a new element to the rightmost end.
     /// # Panics
-    /// Panics if a single run contains more than `usize` elements. 
+    /// Panics if a single run contains more than `usize` elements.
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// let mut rlv = RunLenVec::new();
@@ -301,7 +300,6 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         }
     }
 
-
     /// Drops all elements.
     /// ```
     /// # use crate::runvec::RunLenVec;
@@ -349,7 +347,6 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
-
 
     /// Splits the collection at the given index, leaving the elements `[0, at)` in the given instance and returning a new instance containing the elements between `[at, len)`.
     /// ```
@@ -455,7 +452,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// # use std::iter::FromIterator;
-    /// let rlv = RunLenVec::from_iter(vec![1,1,1,2,3]); 
+    /// let rlv = RunLenVec::from_iter(vec![1,1,1,2,3]);
     /// assert_eq!(*rlv.get(0).unwrap(), 1);
     /// assert_eq!(*rlv.get(4).unwrap(), 3);
     /// assert_eq!(rlv.get(5), None);
@@ -465,11 +462,33 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             .and_then(|(i, _)| self.inner.get(i))
             .map(|(ref e, _)| e)
     }
+
+    /// Returns a handle allowing the element at the given index to be mutated, with the following provisos:
+    ///
+    /// - Writes are only propagated to the collection when the `MutHandle` drops, and _will not_ be stored if it leaks
+    /// - Writes that register as equal to the previous value are not committed.
+    ///
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1,1,1,1,1]);
+    /// *rlv.get_mut(2).unwrap() = 2;
+    /// *rlv.get_mut(4).unwrap() = 3;
+    /// assert_eq!(rlv.to_vec(), vec![1,1,2,1,3]);
+    /// ```
+    pub fn get_mut(&mut self, index: usize) -> Option<MutHandle<T>> {
+        if index < self.total_size {
+            Some(MutHandle::new(self, index))
+        } else {
+            None
+        }
+    }
+
     /// Reverses the collection in place.
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// # use std::iter::FromIterator;
-    /// let mut rlv = RunLenVec::from_iter(vec![1,1,2,2,3]); 
+    /// let mut rlv = RunLenVec::from_iter(vec![1,1,2,2,3]);
     /// rlv.reverse();
     /// assert_eq!(rlv.to_vec(), vec![3,2,2,1,1]);
     /// ```
@@ -672,22 +691,70 @@ impl<T: Clone> Iterator for IntoIter<T> {
     }
 }
 
-#[test]
-fn compaction_test() {
-    let mut rlv = RunLenVec {
-        inner: vec![
-            (1, 1),
-            (1, 1),
-            (1, 2),
-            (2, 2),
-            (2, 1),
-            (1, 1),
-            (1, 1),
-            (1, 1),
-        ],
-        total_size: 10,
-    };
-    rlv.compact();
-    assert_eq!(rlv.inner.len(), 3);
-    assert_eq!(rlv.len(), 10);
+pub struct MutHandle<'a, T: 'a + RunLenCompressible> {
+    src: &'a mut RunLenVec<T>,
+    index: usize,
+    element: Option<T>,
+}
+
+impl<'a, T: 'a + RunLenCompressible> MutHandle<'a, T> {
+    fn new(src: &mut RunLenVec<T>, index: usize) -> MutHandle<T> {
+        let element = src
+            .segment_containing_index(index)
+            .map(|(n, _)| src.inner[n].0.clone());
+        MutHandle {
+            src,
+            index,
+            element,
+        }
+    }
+}
+
+impl<'a, T: 'a + RunLenCompressible> core::ops::Deref for MutHandle<'a, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.element.as_ref().unwrap()
+    }
+}
+
+impl<'a, T: 'a + RunLenCompressible> core::ops::DerefMut for MutHandle<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        self.element.as_mut().unwrap()
+    }
+}
+
+impl<'a, T: 'a + RunLenCompressible> Drop for MutHandle<'a, T> {
+    fn drop(&mut self) {
+        use std::iter::*;
+        let new_element = self.element.take().unwrap();
+        let (segment_index, preceding) = self.src.segment_containing_index(self.index).unwrap();
+        let (element, ref count) = &mut self.src.inner[segment_index];
+        let succeeding = count - preceding - 1;
+        if new_element != *element {
+            match (preceding, succeeding) {
+                (0, 0) => {
+                    *element = new_element;
+                }
+                (p, 0) => {
+                    let prefix = once((element.clone(), p));
+                    let new = once((new_element, 1));
+                    let items = prefix.chain(new);
+                    self.src.inner.splice(segment_index..=segment_index, items);
+                }
+                (0, s) => {
+                    let new = once((new_element, 1));
+                    let suffix = once((element.clone(), s));
+                    let items = new.chain(suffix);
+                    self.src.inner.splice(segment_index..=segment_index, items);
+                }
+                (p, s) => {
+                    let prefix = once((element.clone(), p));
+                    let new = once((new_element, 1));
+                    let suffix = once((element.clone(), s));
+                    let items = prefix.chain(new).chain(suffix);
+                    self.src.inner.splice(segment_index..=segment_index, items);
+                }
+            }
+        }
+    }
 }
