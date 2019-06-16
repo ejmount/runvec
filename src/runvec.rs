@@ -592,6 +592,7 @@ impl<T: RunLenCompressible> Extend<T> for RunLenVec<T> {
             }
         }
         self.inner.extend(new_elements);
+        self.update_size();
     }
 }
 
