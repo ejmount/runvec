@@ -211,10 +211,18 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// ```
     pub fn remove(&mut self, index: usize) -> T {
         let (segment_index, _) = self.segment_containing_index(index).unwrap();
-        let segment = &mut self.inner[segment_index];
-        segment.1 -= 1;
-        let element = segment.0.clone();
-        if segment.1 == 0 {
+        let (ref removed_element, ref mut count) = &mut self.inner[segment_index];
+        let element = removed_element.clone();
+        *count -= 1;
+        if *count == 0 {
+            if let Some([(el, ref mut first_count), _, (el2, ref second_count)]) =
+                self.inner.get_mut(segment_index - 1..=segment_index + 1)
+            {
+                if el == el2 {
+                    *first_count += second_count;
+                }
+                self.inner.remove(segment_index + 1);
+            }
             self.inner.remove(segment_index);
         }
         self.total_size -= 1;
