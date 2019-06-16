@@ -467,6 +467,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     ///
     /// - Writes are only propagated to the collection when the `MutHandle` drops, and _will not_ be stored if it leaks
     /// - Writes that register as equal to the previous value are not committed.
+    /// - Modifying an element is _not_ `O(1)` complexity. It is potentially as high as `O(n)` and may reallocate the internal storage if necessary.
     ///
     /// ```
     /// # use crate::runvec::RunLenVec;
@@ -475,6 +476,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// *rlv.get_mut(2).unwrap() = 2;
     /// *rlv.get_mut(4).unwrap() = 3;
     /// assert_eq!(rlv.to_vec(), vec![1,1,2,1,3]);
+    /// assert_eq!(rlv.compressed_len(), 4);
     /// ```
     pub fn get_mut(&mut self, index: usize) -> Option<MutHandle<T>> {
         if index < self.total_size {
