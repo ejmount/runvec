@@ -55,6 +55,33 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         }
     }
 
+    /// Extract the underlying storage from this vector. This is safe because the storage is a valid `Vec<(T,usize)>`.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let rlv = RunLenVec::from_iter(vec![1,1,1,1]);
+    /// assert_eq!(rlv.into_raw(), vec![(1,4)]);
+    /// ```
+    pub fn into_raw(self) -> Vec<(T, usize)> {
+        self.inner
+    }
+
+    /// Construct a `RunLenVec` from a raw `Vec<(T, usize)>`. The consumed value may be modified, so `RunLenVec::from_raw(V).into_raw() != V` in general.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let rlv = RunLenVec::from_raw(vec![(1,2), (1,2), (2,1)]);
+    /// # assert_eq!(rlv.compressed_len(), 2);
+    /// assert_eq!(rlv.to_vec(), vec![1,1,1,1,2]);
+    /// ```
+    pub fn from_raw(inner: Vec<(T, usize)>) -> RunLenVec<T> {
+        let mut rlv = RunLenVec {
+            inner,
+            total_size: 0,
+        };
+        rlv.compact();
+        rlv.update_size();
+        rlv
+    }
 
     /// Constructs a new vector with the given capacity. See [`capacity()`][capacity] for how this differs from the capacity of a `Vec`.
     /// 
