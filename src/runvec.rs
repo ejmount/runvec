@@ -398,6 +398,7 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             while self.total_size < new_len {
                 self.push(f())
             }
+            self.total_size = new_len;
         }
     }
 
