@@ -1,8 +1,9 @@
 use crate::iter::{ExpandingIterator, RunLengthIterator};
 
-/// Hello
+/// A marker trait indicating which types can be usefully used in [RunLenVec]. Automatically implemented for all compatible types.
 pub trait RunLenCompressible: Clone + PartialEq {}
 impl<T> RunLenCompressible for T where T: Clone + PartialEq {}
+
 
 #[derive(Clone)]
 pub struct RunLenVec<T: RunLenCompressible> {
@@ -11,6 +12,7 @@ pub struct RunLenVec<T: RunLenCompressible> {
 }
 
 impl<T: RunLenCompressible> RunLenVec<T> {
+    // Returns the index of the segment containing the given expanded index, along with the offset between the start of that segment and the start of the index
     fn segment_containing_index(&self, index: usize) -> Option<(usize, usize)> {
         if index < self.total_size {
             let mut total_span = 0;
@@ -40,6 +42,12 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.total_size = self.inner.iter().map(|(_, s)| s).sum();
     }
 
+    /// Create a empty vec.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let rlv = RunLenVec::<u32>::new();
+    /// assert!(rlv.is_empty());
+    /// ```
     pub fn new() -> RunLenVec<T> {
         RunLenVec {
             inner: vec![],
@@ -47,33 +55,70 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         }
     }
 
+
+    /// Constructs a new vector with the given capacity. See [`capacity()`][capacity] for how this differs from the capacity of a `Vec`.
+    /// 
+    /// [capacity]: #method.capacity
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let mut rlv = RunLenVec::with_capacity(1);
+    /// for _ in 0..1_000_000 {
+    ///     rlv.push(1);
+    /// }
+    /// # assert_eq!(rlv.compressed_len(), 1);
+    /// assert_eq!(rlv.capacity(), 1);
+    /// assert_eq!(rlv.len(), 1_000_000);
+    /// ```
     pub fn with_capacity(capacity: usize) -> RunLenVec<T> {
         RunLenVec {
             inner: Vec::with_capacity(capacity),
             total_size: 0,
         }
     }
+
+    /// Returns the capacity of the underlying storage. The vector can store this many _non-contigious runs_ before having to resize - it is not a limit on the total number of elements.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// let mut rlv = RunLenVec::from_raw(vec![(1,1000000)]);
+    /// # assert_eq!(rlv.compressed_len(), 1);
+    /// assert_eq!(rlv.len(), 1000000);
+    /// assert!(rlv.capacity() < 1000000);
+    /// ```
     pub fn capacity(&self) -> usize {
         self.inner.capacity()
     }
+
+    /// Increases the capacity to hold at least `additional` more runs of any size, with the same disclaimers as [`Vec::reserve`][reserve]
+    /// 
+    /// [reserve]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.reserve
+    /// # Panics
+    /// Panics if the new capacity overflows `usize`
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1]);
+    /// rlv.reserve(10);
+    /// assert!(rlv.capacity() >= 11);
+    /// ```
     pub fn reserve(&mut self, additional: usize) {
         self.inner.reserve(additional)
     }
-    pub fn reserve_exact(&mut self, additional: usize) {
-        self.inner.reserve_exact(additional)
-    }
+
+    /// Shrinks the vector as much as possible, as per [`Vec::shrink_to_fit`][shrink]
+    /// 
+    /// [shrink]: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.shrink_to_fit
     pub fn shrink_to_fit(&mut self) {
         self.inner.shrink_to_fit()
     }
 
-    /// Shortens the vector to have the given number of elements, or fewer. Has no effect if the vector is already short enough.
+    /// Shortens the vector by dropping elements until it has the given uncompressed length. Has no effect if the vector is already short enough.
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// # use std::iter::FromIterator;
     /// let mut rlv = RunLenVec::from_iter(vec![1,1,1,1,2,1,1,1]);
     /// rlv.truncate(3);
     /// assert_eq!(rlv.len(), 3);
-    /// assert_eq!(rlv.count_runs(), 1);
+    /// assert_eq!(rlv.compressed_len(), 1);
     /// ```
     pub fn truncate(&mut self, len: usize) {
         if len >= self.total_size {
@@ -95,14 +140,16 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     }
 
     /// Insert the given element into the given logical index, splitting a run if required.
+    /// # Panics 
+    /// Panics if a single run contains more than `usize` elements. 
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// # use std::iter::FromIterator;
     /// let mut rlv = RunLenVec::from_iter(vec![1,1,1]);
     /// rlv.insert(2, 2);
     /// # assert_eq!(rlv.len(), 4);
-    /// # assert_eq!(rlv.count_runs(), 3);
-    /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![1,1,2,1]);
+    /// # assert_eq!(rlv.compressed_len(), 3);
+    /// assert_eq!(rlv.to_vec(), vec![1,1,2,1]);
     /// ```
     pub fn insert(&mut self, index: usize, element: T) {
         if index == self.total_size {
@@ -132,9 +179,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// let mut rlv = RunLenVec::from_iter(vec![1,1,2,1,1]);
     /// rlv.remove(2);
     /// # assert_eq!(rlv.len(), 4);
-    /// println!("{:?}", rlv);
-    /// # assert_eq!(rlv.count_runs(), 1);
-    /// assert_eq!( vec![1,1,1,1], rlv.into_iter().collect::<Vec<_>>());
+    /// # assert_eq!(rlv.compressed_len(), 1);
+    /// assert_eq!( rlv.to_vec(), vec![1,1,1,1]);
     /// ```
     pub fn remove(&mut self, index: usize) -> T {
         let (segment_index, _) = self.segment_containing_index(index).unwrap();
@@ -169,6 +215,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         self.update_size();
     }
     /// Pushes a new element to the rightmost end.
+    /// # Panics
+    /// Panics if a single run contains more than `usize` elements. 
     /// ```
     /// # use crate::runvec::RunLenVec;
     /// let mut rlv = RunLenVec::new();
@@ -176,8 +224,8 @@ impl<T: RunLenCompressible> RunLenVec<T> {
     /// rlv.push(0);
     /// rlv.push(1);
     /// # assert_eq!(rlv.len(), 3);
-    /// # assert_eq!(rlv.count_runs(), 2);
-    /// assert_eq!(rlv.into_iter().collect::<Vec<_>>(), vec![0,0,1]);
+    /// # assert_eq!(rlv.compressed_len(), 2);
+    /// assert_eq!(rlv.to_vec(), vec![0,0,1]);
     /// ```
     pub fn push(&mut self, element: T) {
         self.total_size += 1;
@@ -218,33 +266,65 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         }
     }
 
-    pub fn append(&mut self, other: &mut Vec<T>) {
-        self.total_size += other.len();
-        self.extend(other.drain(..));
-    }
-    pub fn join(&mut self, other: &mut Vec<(T, usize)>) {
-        if let (Some(l), Some(f)) = (self.inner.last_mut(), other.first_mut()) {
-            if l.0 == f.0 {
-                l.1 += f.1;
-                other.remove(0);
-            }
-        }
-        self.inner.append(other);
-        self.update_size();
-    }
+
+    /// Drops all elements.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1,2,3,4,5]);
+    /// rlv.clear();
+    /// assert_eq!(rlv.len(), 0);
+    /// assert_eq!(rlv.compressed_len(), 0);
+    /// ```
     pub fn clear(&mut self) {
         self.inner.clear();
         self.total_size = 0;
     }
+
+    /// Returns the total number of elements. Potentially larger than [`capacity`](capacity) when adjacent elements are equal.
+    /// [capacity]: #method.capacity
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let rlv = RunLenVec::from_iter(vec![1,1,1,1,1]);
+    /// assert_eq!(rlv.len(), 5);
+    /// ```
     pub fn len(&self) -> usize {
         self.total_size
     }
-    pub fn count_runs(&self) -> usize {
+
+    /// Returns the number of distinct runs of non-equal elements. This value is limited by the capacity.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let rlv = RunLenVec::from_iter(vec![1,1,1,1,1]);
+    /// assert_eq!(rlv.compressed_len(), 1);
+    /// ```
+    pub fn compressed_len(&self) -> usize {
         self.inner.len()
     }
+
+    /// Returns `true` when there are no elements.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// assert!(!RunLenVec::from_iter(vec![1]).is_empty());
+    /// assert!(RunLenVec::from_iter(vec![0u32; 0]).is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
+
+
+    /// Splits the collection at the given index, leaving the elements `[0, at)` in the given instance and returning a new instance containing the elements between `[at, len)`.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let mut orig_rlv = RunLenVec::from_iter(vec![1,1,1,2,2]);
+    /// let splitee = orig_rlv.split_off(2);
+    /// assert_eq!(orig_rlv.to_vec(), vec![1,1]);
+    /// assert_eq!(splitee.to_vec(), vec![1,2,2]);
+    /// ```
     pub fn split_off(&mut self, at: usize) -> RunLenVec<T> {
         let (segment, offset) = self.segment_containing_index(at).unwrap();
         let excess = self.inner[segment].1 - offset;
@@ -261,6 +341,17 @@ impl<T: RunLenCompressible> RunLenVec<T> {
         new_vec.update_size();
         return new_vec;
     }
+
+    /// Resizes the collection so that `len` is equal to `new_len`, using the provided function to generate new elements if required.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1,1,1]);
+    /// rlv.resize_with(5, || 0);
+    /// assert_eq!(rlv.to_vec(), vec![1,1,1,0,0]);
+    /// rlv.resize_with(2, || 0);
+    /// assert_eq!(rlv.to_vec(), vec![1,1]);
+    /// ```
     pub fn resize_with<F>(&mut self, new_len: usize, mut f: F)
     where
         F: FnMut() -> T,
@@ -274,6 +365,17 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             }
         }
     }
+
+    /// Resizes the collection so that `len` is equal to `new_len`, cloning the provided element as required if the collection needs to be larger.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1,1,1]);
+    /// rlv.resize(5, 7);
+    /// assert_eq!(rlv.to_vec(), vec![1,1,1,7,7]);
+    /// rlv.resize(2, 7);
+    /// assert_eq!(rlv.to_vec(), vec![1,1]);
+    /// ```
     pub fn resize(&mut self, new_len: usize, value: T) {
         if new_len < self.total_size {
             self.truncate(new_len)
@@ -290,21 +392,66 @@ impl<T: RunLenCompressible> RunLenVec<T> {
             }
         }
     }
+
+    /// Returns a reference to the first element. Returns `None` if the collection is empty.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// assert_eq!(*RunLenVec::from_iter(vec![1]).first().unwrap(), 1);
+    /// assert_eq!(RunLenVec::from_iter(vec![0u32; 0]).first(), None);
+    /// ```
     pub fn first(&self) -> Option<&T> {
         self.inner.first().map(|(ref e, _)| e)
     }
+
+    /// Returns a reference to the last element. Returns `None` if the collection is empty.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// assert_eq!(*RunLenVec::from_iter(vec![1,2,3]).last().unwrap(), 3);
+    /// assert_eq!(RunLenVec::from_iter(vec![0u32; 0]).last(), None);
+    /// ```
     pub fn last(&self) -> Option<&T> {
         self.inner.last().as_ref().map(|(ref e, _)| e)
     }
+
+    /// Returns a reference to the element at the given index, if within range.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let rlv = RunLenVec::from_iter(vec![1,1,1,2,3]); 
+    /// assert_eq!(*rlv.get(0).unwrap(), 1);
+    /// assert_eq!(*rlv.get(4).unwrap(), 3);
+    /// assert_eq!(rlv.get(5), None);
+    /// ```
     pub fn get(&self, index: usize) -> Option<&T> {
         self.segment_containing_index(index)
             .and_then(|(i, _)| self.inner.get(i))
             .map(|(ref e, _)| e)
     }
+    /// Reverses the collection in place.
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let mut rlv = RunLenVec::from_iter(vec![1,1,2,2,3]); 
+    /// rlv.reverse();
+    /// assert_eq!(rlv.to_vec(), vec![3,2,2,1,1]);
+    /// ```
     pub fn reverse(&mut self) {
         self.inner.reverse()
     }
 
+    /// Returns an iterator over the collection
+    /// ```
+    /// # use crate::runvec::RunLenVec;
+    /// # use std::iter::FromIterator;
+    /// let x = RunLenVec::from_iter(vec![1, 2, 4]);
+    /// let mut iterator = x.iter();
+    /// assert_eq!(iterator.next(), Some(&1));
+    /// assert_eq!(iterator.next(), Some(&2));
+    /// assert_eq!(iterator.next(), Some(&4));
+    /// assert_eq!(iterator.next(), None);
+    /// ```
     pub fn iter(&self) -> Iter<T> {
         Iter::new(&self.inner)
     }
